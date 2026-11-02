@@ -45,6 +45,7 @@ O app é compilado com `npm run build`, saída `dist`. Configure `VITE_SUPABASE_
 ## Cálculos e limites atuais
 
 - A cota de água e luz é proporcional aos moradores ativos cadastrados no mês corrente. Rateios passados ainda são recalculados se a quantidade de moradores mudar.
+- O histórico financeiro mostra os meses desde o início do contrato (ou cadastro da unidade) até o mês atual para o administrador e o inquilino. Pagamentos confirmados ficam registrados; cobranças em aberto são recalculadas com os valores atuais da unidade, pois ainda não há snapshots imutáveis de cada mês.
 - Multa única de 10% após o vencimento; juros simples de 1% ao mês proporcionais a 30 dias, apenas sobre o aluguel.
 - O demonstrativo do inquilino pode ser impresso pelo navegador. Ele não é um boleto registrado, não recebe pagamento e não confirma baixa.
 - A integração de boleto real, upload privado de contratos, armazenamento imutável de cada rateio mensal e validação contábil ainda não estão implementados.
