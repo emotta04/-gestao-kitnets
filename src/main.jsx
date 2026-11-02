@@ -94,7 +94,12 @@ function App() {
     event.preventDefault(); setBusy(true); setNotice('');
     const form = new FormData(event.currentTarget);
     const { data, error } = await supabase.functions.invoke('create-tenant-user', { body: { email: form.get('email'), unit_id: form.get('unit_id') } });
-    if (error || data?.error) setNotice(`Não foi possível enviar o convite: ${data?.error || error.message}`);
+    let detail = data?.error || data?.message;
+    if (!detail && error?.context && typeof error.context.clone === 'function') {
+      const payload = await error.context.clone().json().catch(() => null);
+      detail = payload?.error || payload?.message;
+    }
+    if (error || data?.error) setNotice(`Não foi possível enviar o convite: ${detail || error.message}`);
     else { setShowTenant(false); setNotice(data.message || 'Convite enviado ao inquilino.'); await loadData(); }
     setBusy(false);
   }
