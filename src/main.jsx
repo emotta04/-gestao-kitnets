@@ -26,8 +26,11 @@ function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
+  const [authAction, setAuthAction] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('type'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [units, setUnits] = useState([]);
   const [bills, setBills] = useState([]);
@@ -101,6 +104,23 @@ function App() {
     if (result.error) setAuthError(result.error.message);
     setBusy(false);
   }
+  async function setTenantPassword(event) {
+    event.preventDefault(); setAuthError('');
+    if (newPassword !== confirmNewPassword) {
+      setAuthError('As senhas não coincidem.');
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) setAuthError(error.message);
+    else {
+      setAuthAction(null);
+      setNewPassword('');
+      setConfirmNewPassword('');
+      window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
+    }
+    setBusy(false);
+  }
   async function saveUnit(event) {
     event.preventDefault(); setBusy(true); setNotice('');
     const form = new FormData(event.currentTarget);
@@ -158,6 +178,7 @@ function App() {
   if (!supabase) return <SetupScreen />;
   if (authLoading) return <div className="loading-screen">Carregando Morada…</div>;
   if (!session) return <AuthScreen email={email} setEmail={setEmail} password={password} setPassword={setPassword} error={authError} busy={busy} onSubmit={authenticate} />;
+  if (authAction === 'invite' || authAction === 'recovery') return <PasswordSetupScreen password={newPassword} setPassword={setNewPassword} confirmPassword={confirmNewPassword} setConfirmPassword={setConfirmNewPassword} error={authError} busy={busy} onSubmit={setTenantPassword} />;
   if (profileLoading) return <div className="loading-screen">Verificando perfil…</div>;
   if (!profile) return <NoRoleScreen email={session.user.email} notice={notice} onSignOut={() => supabase.auth.signOut()} />;
   if (profile.role === 'tenant') return <TenantPortal unit={units[0]} bill={currentBill} payments={payments} residents={totalResidents} month={selectedMonth} setMonth={setSelectedMonth} payDate={payDate} setPayDate={setPayDate} notice={notice} clearNotice={() => setNotice('')} onSignOut={() => supabase.auth.signOut()} />;
@@ -208,6 +229,7 @@ function EmptyState({text}) { return <div className="empty-state"><div className
 function Modal({title,onClose,children}) { return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}><section className="modal"><div className="modal-header"><h2>{title}</h2><button onClick={onClose} aria-label="Fechar"><X size={19}/></button></div>{children}</section></div>; }
 function AuthScreen({email,setEmail,password,setPassword,error,busy,onSubmit}) { return <div className="auth-screen"><div className="auth-card"><div className="brand auth-brand"><div className="brand-mark"><Home size={19}/></div><span>morada<span className="brand-dot">.</span></span></div><div className="eyebrow">GESTÃO DE LOCAÇÃO</div><h1>Bem-vindo de volta</h1><p>Acesse seu painel de gestão de kitnets com segurança.</p><form onSubmit={onSubmit}><label>E-mail<input type="email" required autoComplete="email" placeholder="voce@email.com" value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Senha<input type="password" required autoComplete="current-password" placeholder="Sua senha" value={password} onChange={e=>setPassword(e.target.value)}/></label>{error&&<div className="auth-message">{error}</div>}<button className="button primary auth-submit" disabled={busy}>{busy?'Aguarde…':'Entrar'}</button></form><div className="auth-privacy">Acesso para administrador e inquilinos convidados.</div></div></div>; }
 function NoRoleScreen({email,notice,onSignOut}) { return <div className="auth-screen"><div className="auth-card"><div className="brand auth-brand"><div className="brand-mark"><Home size={19}/></div><span>morada<span className="brand-dot">.</span></span></div><div className="eyebrow">ACESSO AINDA NÃO VINCULADO</div><h1>Fale com o administrador</h1><p>A conta {email} ainda não foi vinculada como administrador ou inquilino. Peça ao administrador para configurar seu acesso.</p>{notice&&<div className="auth-message">{notice}</div>}<button className="button secondary auth-submit" onClick={onSignOut}>Sair</button></div></div>; }
+function PasswordSetupScreen({password,setPassword,confirmPassword,setConfirmPassword,error,busy,onSubmit}) { return <div className="auth-screen"><div className="auth-card"><div className="brand auth-brand"><div className="brand-mark"><Home size={19}/></div><span>morada<span className="brand-dot">.</span></span></div><div className="eyebrow">CONFIGURAÇÃO DE ACESSO</div><h1>Crie sua senha</h1><p>Defina uma senha para entrar no portal do inquilino com seu e-mail.</p><form onSubmit={onSubmit}><label>Senha<input type="password" required minLength="8" autoComplete="new-password" placeholder="Pelo menos 8 caracteres" value={password} onChange={event=>setPassword(event.target.value)}/></label><label>Confirme a senha<input type="password" required minLength="8" autoComplete="new-password" placeholder="Digite a senha novamente" value={confirmPassword} onChange={event=>setConfirmPassword(event.target.value)}/></label>{error&&<div className="auth-message">{error}</div>}<button className="button primary auth-submit" disabled={busy}>{busy?'Salvando…':'Salvar senha e continuar'}</button></form><div className="auth-privacy">Use uma senha única que não use em outros serviços.</div></div></div>; }
 function TenantPortal({unit,bill,payments,residents,month,setMonth,payDate,setPayDate,notice,clearNotice,onSignOut}) {
   if (!unit) return <NoRoleScreen email="inquilino" notice={notice || 'Sua unidade não está vinculada à conta.'} onSignOut={onSignOut}/>;
   const dueDate = `${month}-${String(unit.due_day).padStart(2,'0')}`;
