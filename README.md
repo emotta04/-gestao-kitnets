@@ -1,34 +1,49 @@
 # Morada — Gestão de kitnets
 
-Aplicação web responsiva em português para gestão de unidades de locação. A persistência compartilhada entre celular e computador usa Supabase (Postgres + Auth + Row Level Security).
+Aplicação web responsiva para gestão de unidades. O administrador cadastra unidades e convida inquilinos. Cada inquilino entra por convite e consulta apenas sua unidade e um demonstrativo imprimível (não é boleto bancário).
 
-## Funcionalidades do MVP
+## Acesso e segurança
 
-- Cadastro de unidades, inquilinos, telefone, moradores, aluguel e vencimento.
-- Campos para número e vigência do contrato e um link opcional para o documento.
-- Rateio mensal de água e luz por morador; a cota da unidade é proporcional ao número de moradores ativos.
-- Simulação do aluguel em atraso: multa única de 10% após o vencimento e juros simples de 1% ao mês, calculados como `1% ÷ 30 × dias em atraso`.
-- Registro de recebimento mensal e painel de acompanhamento.
-- Login por e-mail e senha; políticas RLS isolam os registros por conta.
+- O primeiro usuário administrador deve existir no Supabase Auth e ser promovido pelo script [`supabase/roles-and-tenant-access.sql`](supabase/roles-and-tenant-access.sql).
+- Depois da configuração inicial, o cadastro público no Supabase Auth deve ser desativado. Novas contas de inquilino são criadas somente pela Edge Function de convite.
+- As políticas RLS separam o administrador dos inquilinos. O inquilino tem leitura da própria unidade, dos rateios do imóvel e dos próprios pagamentos; não pode editar dados.
+- A criação de contas de inquilinos usa a chave `service_role` apenas na Edge Function Supabase, nunca no navegador.
+
+## Configuração inicial do Supabase
+
+1. Execute [`supabase/schema.sql`](supabase/schema.sql), se ainda não executou.
+2. Confirme que o usuário administrador já existe em **Authentication → Users**. Se ainda não existir, crie/con­vide o usuário pelo painel antes de desligar o cadastro público.
+3. Abra `supabase/roles-and-tenant-access.sql`, substitua `SEU_EMAIL_DE_ADMIN` pelo e-mail exato da conta e execute o script no SQL Editor. Isso cria os perfis, políticas e associa o usuário existente como administrador.
+4. No Auth, permita o endereço publicado do app nas URLs de redirecionamento para que os convites de e-mail retornem ao site.
+5. Depois que o administrador estiver configurado, desative o cadastro público em **Authentication → Settings / Sign-in**. O nome exato da seção pode variar no painel.
+
+## Convites de inquilinos
+
+A função [`supabase/functions/create-tenant-user/index.ts`](supabase/functions/create-tenant-user/index.ts) verifica o perfil de administrador, envia o convite por e-mail e vincula a conta a uma única unidade. Para publicá-la:
+
+```sh
+supabase login
+supabase link --project-ref SEU_PROJECT_REF
+supabase secrets set APP_SITE_URL=https://SEU-SITE-PUBLICADO
+supabase functions deploy create-tenant-user
+```
+
+A URL e as chaves de sistema do Supabase são disponibilizadas à Edge Function pelo ambiente Supabase. **Não** configure a chave `service_role` como variável `VITE_*`, no Cloudflare ou no código do navegador.
 
 ## Executar localmente
 
-1. Instale Node.js 20 ou superior.
-2. Crie um projeto Supabase e execute [`supabase/schema.sql`](supabase/schema.sql) no SQL Editor.
-3. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` com os valores de **Project Settings → API** do seu projeto.
-4. No painel do Supabase, configure a confirmação de e-mail em Authentication conforme sua preferência e cadastre uma URL de redirecionamento para o endereço local/publicado.
-5. Rode `npm install` e `npm run dev`.
+1. Instale Node.js 20 ou superior e a CLI do Supabase.
+2. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` com a Project URL e uma chave pública `anon`/publishable.
+3. Rode `npm install` e `npm run dev`.
+4. Para testar convites localmente, publique a Edge Function no Supabase apontando `APP_SITE_URL` para a URL que será usada no fluxo de confirmação.
 
-A chave `anon`/publishable pode ser usada no navegador porque todas as tabelas têm RLS habilitado. **Nunca** coloque a chave `service_role` no frontend.
+## Publicação no Cloudflare
 
-## Publicação
+O app é compilado com `npm run build`, saída `dist`. Configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` como variáveis de **build** do projeto Cloudflare; são incorporadas ao bundle público do navegador. Uma chave pública anon/publishable pode ser usada no frontend porque as tabelas aplicam RLS. **Nunca** use `service_role` no frontend.
 
-Publique o projeto Vite em um serviço de hospedagem estática (por exemplo, Vercel, Netlify ou Cloudflare Pages), definindo as mesmas variáveis de ambiente no painel do serviço. Adicione a URL publicada às URLs permitidas no Supabase Auth. O repositório não contém credenciais nem projeto Supabase provisionado.
+## Cálculos e limites atuais
 
-## Observações importantes
-
-- O formulário guarda os metadados do contrato e aceita um link para o documento. O upload do arquivo para armazenamento privado ainda não está implementado; evite links públicos com dados pessoais.
-- O vencimento é limitado aos dias 1 a 28 para evitar ambiguidades em meses curtos.
-- O cálculo dos juros usa mês comercial de 30 dias e juros simples. O pagamento estimado na tela é uma simulação; não substitui a conferência do contrato e das regras aplicáveis.
-- Ao registrar o pagamento, esta versão salva como recebido o total mostrado na tela (aluguel corrigido + rateio) e a data selecionada na simulação. Confira o valor antes de confirmar.
-- O rateio de meses passados é recalculado com o cadastro atual de moradores. Antes do uso contábil, é recomendável armazenar uma fotografia mensal de cada cota para que alterações futuras não mudem o histórico.
+- A cota de água e luz é proporcional aos moradores ativos cadastrados no mês corrente. Rateios passados ainda são recalculados se a quantidade de moradores mudar.
+- Multa única de 10% após o vencimento; juros simples de 1% ao mês proporcionais a 30 dias, apenas sobre o aluguel.
+- O demonstrativo do inquilino pode ser impresso pelo navegador. Ele não é um boleto registrado, não recebe pagamento e não confirma baixa.
+- A integração de boleto real, upload privado de contratos, armazenamento imutável de cada rateio mensal e validação contábil ainda não estão implementados.
