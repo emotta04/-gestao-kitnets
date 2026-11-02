@@ -26,6 +26,7 @@ supabase login
 supabase link --project-ref SEU_PROJECT_REF
 supabase secrets set APP_SITE_URL=https://SEU-SITE-PUBLICADO
 supabase functions deploy create-tenant-user
+supabase functions deploy manage-tenant-user
 ```
 
 A URL e as chaves de sistema do Supabase são disponibilizadas à Edge Function pelo ambiente Supabase. **Não** configure a chave `service_role` como variável `VITE_*`, no Cloudflare ou no código do navegador.
